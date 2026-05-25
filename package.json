@@ -10,9 +10,10 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "tsc --watch"
+    "build":   "tsc",
+    "prepare": "tsc",
+    "start":   "node dist/index.js",
+    "dev":     "tsc --watch"
   },
   "keywords": [
     "mcp",
@@ -27,7 +28,7 @@
   "homepage": "https://gaspar.hidagama.com",
   "repository": {
     "type": "git",
-    "url": "https://github.com/hidagama/gaspar-mcp.git"
+    "url": "git+https://github.com/hidagama/gaspar-mcp.git"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4"
