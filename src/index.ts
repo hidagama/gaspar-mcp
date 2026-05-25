@@ -78,23 +78,39 @@ function asToolResult(r: RestResponse): { content: Array<{ type: 'text'; text: s
 }
 
 const server = new Server(
-  { name: 'gaspar-mcp', version: '0.1.0' },
+  { name: 'gaspar-mcp', version: '0.2.0' },
   { capabilities: { tools: {} } },
 );
 
 // ────────────────────────────────────────────────────────────────────────────
 // Tool catalogue
+//
+// Recommended call-order for a fresh campaign workflow:
+//   1. auth_check       — verify the key works + which scopes are granted
+//   2. list_accounts    — get a gaspar_account_id to pass to create_campaign
+//   3. create_campaign  — start a draft (gaspar_account_id required)
+//   4. add_recipients   — bulk-add the audience
+//   5. preview_campaign — render the merged subject + body for recipient #1
+//   6. launch_campaign  — start sending (requires campaigns:launch scope)
+//
+// Tool descriptions below mention these dependencies inline so AI assistants
+// pick the right tool for the right step without manual prompting.
 // ────────────────────────────────────────────────────────────────────────────
 
 const TOOLS = [
   {
+    name: 'auth_check',
+    description: 'ALWAYS CALL FIRST in a new session. Side-effect-free auth diagnostic — verifies the GASPAR_API_KEY is valid, reports which scopes (campaigns:read / campaigns:write / campaigns:launch) are granted, and returns the plan tier. Returns { ok, user_id, via, scopes, plan, label, message }. Run this once before attempting any other tool; if it returns a non-200 or missing scopes, surface the message to the user and stop.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
     name: 'list_accounts',
-    description: 'List the Gmail/Outlook sender accounts connected to this Gaspar user. Returns id, email, display name, status, daily send headroom. Use this first to pick a sender for a new campaign.',
+    description: 'List the Gmail / Outlook sender accounts connected to this Gaspar user. Returns id, email, display name, status, daily send headroom. CALL THIS BEFORE create_campaign — you need an account id from this list to pass as the `gaspar_account_id` field. If the user has zero connected accounts, surface that to the user and stop; they need to connect a mailbox at gaspar.hidagama.com/accounts before any campaign can be sent.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
     name: 'list_campaigns',
-    description: 'List campaigns owned by this user with their honest open/click/reply stats. Status values: draft, scheduled, sending, sent, paused.',
+    description: 'List campaigns owned by this user with their honest open / click / reply stats. Status values: draft, scheduled, sending, sent, paused. Use to find existing campaigns to follow up on, clone, or analyse — not needed before creating a new campaign.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
@@ -109,7 +125,7 @@ const TOOLS = [
   },
   {
     name: 'create_campaign',
-    description: 'Create a new draft campaign. Returns the new campaign id. Subject and body can be set here or via update_campaign. Throttle defaults to 30/hour.',
+    description: 'Create a new draft campaign. Returns the new campaign id. REQUIRES a `gaspar_account_id` from list_accounts — call list_accounts FIRST to get a valid id. Subject and body can be set here or via update_campaign afterwards. Throttle defaults to 30/hour to protect Gmail/Outlook deliverability.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -151,7 +167,7 @@ const TOOLS = [
   },
   {
     name: 'add_recipients',
-    description: 'Add recipients to a draft campaign. Each recipient is an object with at least an `email` field; any other fields become merge variables available in {{placeholders}}. Returns how many were inserted vs deduplicated.',
+    description: 'Add recipients to a draft campaign. CALL THIS AFTER create_campaign. Each recipient is an object with at least an `email` field; any other fields (first_name, company, country, etc.) become merge variables available in the subject/body as {{first_name}}, {{company}}, {{country}}. Returns how many were inserted vs deduplicated against existing recipients + suppression list.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -183,7 +199,7 @@ const TOOLS = [
   },
   {
     name: 'preview_campaign',
-    description: 'Render the merged subject+body for the first recipient. Use BEFORE launch_campaign so the user can verify the merge fields look right.',
+    description: 'Render the merged subject + body for the first recipient. ALWAYS CALL THIS BEFORE launch_campaign — show the user the preview output as a chat message, get their explicit go-ahead, THEN launch. The preview catches missing merge fields, bad placeholders, and content issues that would otherwise hit real recipients.',
     inputSchema: {
       type: 'object',
       properties: { campaign_id: { type: 'string' } },
@@ -193,7 +209,7 @@ const TOOLS = [
   },
   {
     name: 'launch_campaign',
-    description: 'Start sending a campaign. REQUIRES the campaigns:launch scope on the API key — keys without it get a 403. The send engine then enqueues recipients at the campaign throttle. Always preview_campaign first and surface the rendered output to the user for explicit go-ahead before calling this.',
+    description: 'Start sending a campaign. THE ONLY IRREVERSIBLE TOOL — once called, real mail goes out to real recipients from the user\'s real mailbox. REQUIRES `campaigns:launch` scope on the API key (run auth_check to verify); keys without it get a 403, which is intentional. PRECONDITIONS: (1) call preview_campaign first, (2) show the user the rendered preview as a chat message, (3) get an explicit "go ahead" confirmation. Never call this proactively. The send engine then enqueues recipients at the campaign throttle (default 30/hour).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -247,6 +263,8 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 
   try {
     switch (name) {
+      case 'auth_check':
+        return asToolResult(await rest('/auth/check'));
       case 'list_accounts':
         return asToolResult(await rest('/accounts'));
       case 'list_campaigns':

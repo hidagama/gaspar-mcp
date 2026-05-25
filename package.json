@@ -1,6 +1,6 @@
 {
   "name": "gaspar-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MCP server for Gaspar — let Claude (or any MCP client) draft and run email outreach campaigns on your Gaspar account.",
   "bin": {
     "gaspar-mcp": "dist/index.js"
