@@ -1,0 +1,43 @@
+{
+  "name": "gaspar-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Gaspar — let Claude (or any MCP client) draft and run email outreach campaigns on your Gaspar account.",
+  "bin": {
+    "gaspar-mcp": "dist/index.js"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "gaspar",
+    "email",
+    "claude",
+    "dagama"
+  ],
+  "author": "DaGaMa Intelligence L.L.C.",
+  "license": "MIT",
+  "homepage": "https://gaspar.hidagama.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hidagama/gaspar-mcp.git"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ]
+}
