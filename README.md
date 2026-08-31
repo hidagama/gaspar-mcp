@@ -200,9 +200,9 @@ A free trial works fine for evaluation. The 14-day trial caps at 50 sends per da
 
 Whatever you'd send through Gaspar normally — campaign subject + body templates, recipient lists, merge fields. Same as if you'd typed them into the dashboard. The MCP server is a thin protocol adapter; it doesn't add a data path that the dashboard doesn't already use.
 
-### Can I run this against a self-hosted or staging Gaspar?
+### Can I point this at a different Gaspar host?
 
-The published version points at `api.hidagama.com`. To target a different host, set `GASPAR_API_BASE` in the env block alongside `GASPAR_API_KEY`. Useful for staging environments or self-hosted forks.
+The published version points at `api.hidagama.com`, which is the Gaspar service. `GASPAR_API_BASE` exists so the client can be aimed at a test host during development of this MCP server itself. Gaspar is a hosted service — there is no self-hosted edition.
 
 ### How do I report a bug or request a tool?
 
