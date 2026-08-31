@@ -215,6 +215,7 @@ This MCP server is part of [DaGaMa Intelligence](https://hidagama.com)'s product
 - **[BoothBot](https://hidagama.com/boothbot)** — scan trade-show business cards via Telegram, WhatsApp, or WeChat. [How to use BoothBot →](https://hidagama.com/boothbot/how-to-use)
 - **[SourceBot](https://hidagama.com/sourcebot)** — capture suppliers, product photos, and voice-noted price quotes at Canton Fair, Yiwu, Hannover Messe, or any sourcing show. [How to use SourceBot →](https://hidagama.com/sourcebot/how-to-use)
 - **[ExpenseBot](https://hidagama.com/expensebot)** — snap business-travel receipts and get categorised expense rows ready for finance. [How to use ExpenseBot →](https://hidagama.com/expensebot/how-to-use)
+- **[Cabral](https://cabral.hidagama.com)** — sourcing and quotation software for trading companies. Turn a customer's messy product file into a sourced, priced, trackable quotation, with supplier comparison and branded share links. Customer-facing mail from Cabral is delivered through Gaspar. [How to use Cabral →](https://cabral.hidagama.com/guide)
 - **[Gaspar](https://gaspar.hidagama.com)** — the email outreach platform this MCP server connects to.
 
 ## Contributing
