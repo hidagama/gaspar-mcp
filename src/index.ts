@@ -18,6 +18,8 @@
  * cron all run server-side and fire regardless of who triggered the launch.
  */
 
+import { readFile } from 'node:fs/promises';
+import { basename, extname } from 'node:path';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -297,6 +299,7 @@ const TOOLS = [
         references:  { type: 'string' },
         reply_all:   { type: 'boolean' },
         signature:   { type: 'boolean', description: 'Append the From address\'s own Gmail signature' },
+        attachments: { type: 'array', items: { type: 'string' }, description: 'Absolute paths of local files to attach (25 MB total). The tool reads them from disk.' },
       },
       required: ['account_id', 'subject', 'html_body'],
       additionalProperties: false,
@@ -329,6 +332,19 @@ const TOOLS = [
     },
   },
 ] as const;
+
+const MIME: Record<string, string> = {
+  '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif', '.webp': 'image/webp', '.txt': 'text/plain', '.csv': 'text/csv',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xls': 'application/vnd.ms-excel',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.ppt': 'application/vnd.ms-powerpoint',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.zip': 'application/zip', '.mp4': 'video/mp4',
+};
+function mimeOf(p: string): string { return MIME[extname(p).toLowerCase()] ?? 'application/octet-stream'; }
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
 
@@ -387,6 +403,13 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         if (a.references !== undefined)  body.references = a.references;
         if (a.reply_all !== undefined)   body.replyAll = a.reply_all;
         if (a.signature !== undefined)   body.signature = a.signature;
+        if (Array.isArray(a.attachments) && a.attachments.length) {
+          body.attachments = await Promise.all((a.attachments as string[]).map(async (p) => ({
+            filename: basename(p),
+            mimeType: mimeOf(p),
+            data:     (await readFile(p)).toString('base64'),
+          })));
+        }
         return asToolResult(await rest(`/accounts/${encodeURIComponent(String(a.account_id))}/drafts`, { method: 'POST', body }));
       }
       case 'delete_draft':
