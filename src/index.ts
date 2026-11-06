@@ -306,6 +306,31 @@ const TOOLS = [
     },
   },
   {
+    name: 'update_draft',
+    description: 'Revise an EXISTING Gmail draft in place: same draftId, same place in Drafts. Replaces the whole message (recipients, subject, body, attachments), so pass everything the draft should contain; Gmail-side BCC and hand-added attachments are not kept unless passed again. Nothing is sent. Same fields as create_draft plus draft_id.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        account_id:  { type: 'string' },
+        draft_id:    { type: 'string', description: 'draftId from create_draft' },
+        to:          { type: 'array', items: { type: 'string' } },
+        cc:          { type: 'array', items: { type: 'string' } },
+        subject:     { type: 'string' },
+        html_body:   { type: 'string' },
+        text_body:   { type: 'string', description: 'Plain-text part. Derived from the HTML if omitted.' },
+        from:        { type: 'string', description: 'Send-as alias; omit for the mailbox default' },
+        thread_id:   { type: 'string' },
+        in_reply_to: { type: 'string' },
+        references:  { type: 'string' },
+        reply_all:   { type: 'boolean' },
+        signature:   { type: 'boolean', description: 'Append the From address\'s own Gmail signature' },
+        attachments: { type: 'array', items: { type: 'string' }, description: 'Absolute paths of local files to attach (25 MB total). The tool reads them from disk.' },
+      },
+      required: ['account_id', 'draft_id', 'subject', 'html_body'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'delete_draft',
     description: 'Permanently delete an unsent draft (it does NOT go to Trash). Only drafts — sent or received mail cannot be touched. Takes the draftId returned by create_draft, not a message id.',
     inputSchema: {
@@ -392,7 +417,8 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       }
       case 'get_message':
         return asToolResult(await rest(`/accounts/${encodeURIComponent(String(a.account_id))}/messages/${encodeURIComponent(String(a.message_id))}`));
-      case 'create_draft': {
+      case 'create_draft':
+      case 'update_draft': {
         const body: Record<string, unknown> = { subject: a.subject, htmlBody: a.html_body };
         if (a.to !== undefined)          body.to = a.to;
         if (a.cc !== undefined)          body.cc = a.cc;
@@ -409,6 +435,9 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
             mimeType: mimeOf(p),
             data:     (await readFile(p)).toString('base64'),
           })));
+        }
+        if (name === 'update_draft') {
+          return asToolResult(await rest(`/accounts/${encodeURIComponent(String(a.account_id))}/drafts/${encodeURIComponent(String(a.draft_id))}`, { method: 'PUT', body }));
         }
         return asToolResult(await rest(`/accounts/${encodeURIComponent(String(a.account_id))}/drafts`, { method: 'POST', body }));
       }
