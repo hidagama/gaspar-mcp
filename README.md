@@ -17,7 +17,7 @@
 
 **Connect your AI assistant to [Gaspar](https://gaspar.hidagama.com) — DaGaMa's email outreach platform — and let it draft, preview, and send personalized cold-email campaigns from your own Gmail or Outlook inbox.** Every send happens through your real address, every reply lands in your real inbox, every campaign respects the spam-risk gate. The MCP server is a thin protocol adapter; the campaign engine, the deliverability tooling, the warmup pool, the Meta Custom Audience push — all of that runs on Gaspar's servers behind your `gsk_` API key.
 
-Install once in your AI assistant's config. **Thirteen typed tools** appear in the tool picker — including a side-effect-free `auth_check` you should call first. Tell your assistant *"Draft a follow-up to every CES contact who opened my last email but didn't click — show me the preview, I'll launch."* That happens.
+Install once in your AI assistant's config. **Eighteen typed tools** appear in the tool picker — including a side-effect-free `auth_check` you should call first. Tell your assistant *"Draft a follow-up to every CES contact who opened my last email but didn't click — show me the preview, I'll launch."* That happens.
 
 ---
 
@@ -62,7 +62,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) o
 }
 ```
 
-**Quit and reopen Claude Desktop** (full quit, not just close window). The 13 Gaspar tools appear in the tool picker.
+**Quit and reopen Claude Desktop** (full quit, not just close window). The 18 Gaspar tools appear in the tool picker.
 
 ### For Cursor / Continue / Cody / other MCP clients
 
@@ -121,7 +121,7 @@ Create a free account at [gaspar.hidagama.com/get-started](https://gaspar.hidaga
 
 The recommended workflow is **write-only** keys: let the assistant compose freely; you press the green button yourself. Best-of-both-worlds setup that keeps the irreversible action in your hands.
 
-## The thirteen tools
+## The eighteen tools
 
 Every tool maps 1:1 to a Gaspar REST endpoint. Schemas are typed; descriptions tell the assistant what each one does plainly.
 
@@ -136,10 +136,15 @@ Every tool maps 1:1 to a Gaspar REST endpoint. Schemas are typed; descriptions t
 | `add_recipients` | Bulk-add recipients with merge fields. Call AFTER `create_campaign`. | `campaigns:write` |
 | `list_recipients` | Per-recipient send / open / click / reply state. | `campaigns:read` |
 | `preview_campaign` | Render merged subject + body for recipient #1. **Always call before `launch_campaign`.** | `campaigns:read` |
-| `launch_campaign` | **The irreversible one.** Requires `campaigns:launch` scope. | `campaigns:launch` |
+| `launch_campaign` | **The irreversible one.** Pass `local_hour` (0-23) to send at that hour in each recipient's own timezone; omit it to send now. | `campaigns:launch` |
 | `pause_campaign` | Pause a sending campaign mid-flight. | `campaigns:write` |
 | `resume_campaign` | Resume a paused campaign. | `campaigns:write` |
 | `get_campaign_events` | Raw delivery events (sent, opened, clicked, bounced, replied, unsubscribed). | `campaigns:read` |
+| `search_messages` | Search one connected mailbox with a Gmail query (`in:sent to:x@y.com`, `newer_than:7d`). | `campaigns:read` |
+| `get_message` | Read one message: headers, plain-text body, attachments, and the Message-ID for a threaded reply. | `campaigns:read` |
+| `create_draft` | Create a Gmail **draft** (new or threaded reply, optional attachments). Never sends; you press Send in Gmail. | any valid key |
+| `update_draft` | Revise an existing draft in place. Replaces the whole message. Never sends. | any valid key |
+| `delete_draft` | Permanently delete an unsent draft. Cannot touch sent or received mail. | any valid key |
 
 ## What an AI assistant can actually do for you
 
@@ -220,7 +225,7 @@ This MCP server is part of [DaGaMa Intelligence](https://hidagama.com)'s product
 
 ## Contributing
 
-Pull requests welcome. Tool additions go in `src/index.ts`; each tool needs a clear description string with call-order hints so AI assistants pick the right one. The package is small enough (~280 lines of TypeScript) to read end-to-end before contributing.
+Pull requests welcome. Tool additions go in `src/index.ts`; each tool needs a clear description string with call-order hints so AI assistants pick the right one. The package is small enough (~470 lines of TypeScript) to read end-to-end before contributing.
 
 If you're installing from a manual `git clone` instead of `npx`:
 
