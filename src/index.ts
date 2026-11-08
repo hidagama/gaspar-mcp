@@ -77,6 +77,17 @@ function asToolResult(r: RestResponse): { content: Array<{ type: 'text'; text: s
   return { content: [{ type: 'text', text }] };
 }
 
+// The tools take `subject` / `body_html`; the REST API stores them as
+// subject_template / body_html_template and rejects (create) or silently
+// ignores (update) the short names.
+function toTemplateFields(a: Record<string, unknown>): Record<string, unknown> {
+  const { subject, body_html, ...others } = a;
+  const out: Record<string, unknown> = { ...others };
+  if (subject !== undefined)   out.subject_template = subject;
+  if (body_html !== undefined) out.body_html_template = body_html;
+  return out;
+}
+
 const server = new Server(
   { name: 'gaspar-mcp', version: '0.2.0' },
   { capabilities: { tools: {} } },
@@ -241,6 +252,70 @@ const TOOLS = [
     },
   },
   {
+    name: 'search_messages',
+    description: 'Search one connected mailbox with a Gmail query (e.g. `in:sent to:x@y.com`, `from:x@y.com newer_than:7d`, `in:drafts subject:"pilot"`). Returns id, threadId, date, from, to, subject, labelIds per message, plus nextPageToken. Get the account id from list_accounts.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        account_id: { type: 'string', description: 'id from list_accounts — which mailbox to search' },
+        query:      { type: 'string', description: 'Gmail search query' },
+        max:        { type: 'number', description: 'Max messages per page (server-capped, ~100).' },
+        page_token: { type: 'string', description: 'nextPageToken from a previous call' },
+      },
+      required: ['account_id', 'query'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'get_message',
+    description: 'Read one message from a connected mailbox: headers, plain-text body, attachments list, and messageIdHeader (pass it as in_reply_to / references when drafting a threaded reply).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        account_id: { type: 'string' },
+        message_id: { type: 'string', description: 'id from search_messages' },
+      },
+      required: ['account_id', 'message_id'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'create_draft',
+    description: 'Create a Gmail DRAFT in a connected mailbox. Nothing is sent — the owner reviews it and presses Send in Gmail. `from` may be a verified Send-as alias of the mailbox. For a reply, pass thread_id plus in_reply_to/references from get_message, or reply_all: true to address the last message\'s sender and recipients. Returns draftId, messageId, threadId. The body must be real HTML.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        account_id:  { type: 'string' },
+        to:          { type: 'array', items: { type: 'string' } },
+        cc:          { type: 'array', items: { type: 'string' } },
+        subject:     { type: 'string' },
+        html_body:   { type: 'string' },
+        text_body:   { type: 'string', description: 'Plain-text part. Derived from the HTML if omitted.' },
+        from:        { type: 'string', description: 'Send-as alias; omit for the mailbox default' },
+        thread_id:   { type: 'string' },
+        in_reply_to: { type: 'string' },
+        references:  { type: 'string' },
+        reply_all:   { type: 'boolean' },
+        signature:   { type: 'boolean', description: 'Append the From address\'s own Gmail signature' },
+      },
+      required: ['account_id', 'subject', 'html_body'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'delete_draft',
+    description: 'Permanently delete an unsent draft (it does NOT go to Trash). Only drafts — sent or received mail cannot be touched. Takes the draftId returned by create_draft, not a message id.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        account_id: { type: 'string' },
+        draft_id:   { type: 'string' },
+      },
+      required: ['account_id', 'draft_id'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'get_campaign_events',
     description: 'Fetch raw delivery events (sent, opened, clicked, bounced, replied, unsubscribed) for a campaign. Use for deep analysis.',
     inputSchema: {
@@ -271,13 +346,11 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         return asToolResult(await rest('/campaigns'));
       case 'get_campaign':
         return asToolResult(await rest(`/campaigns/${encodeURIComponent(String(a.campaign_id))}`));
-      case 'create_campaign': {
-        const { name: campName, ...rest_body } = a;
-        return asToolResult(await rest('/campaigns', { method: 'POST', body: { name: campName, ...rest_body } }));
-      }
+      case 'create_campaign':
+        return asToolResult(await rest('/campaigns', { method: 'POST', body: toTemplateFields(a) }));
       case 'update_campaign': {
         const { campaign_id, ...patch } = a;
-        return asToolResult(await rest(`/campaigns/${encodeURIComponent(String(campaign_id))}`, { method: 'PATCH', body: patch }));
+        return asToolResult(await rest(`/campaigns/${encodeURIComponent(String(campaign_id))}`, { method: 'PATCH', body: toTemplateFields(patch) }));
       }
       case 'add_recipients':
         return asToolResult(await rest(`/campaigns/${encodeURIComponent(String(a.campaign_id))}/recipients`, { method: 'POST', body: { recipients: a.recipients } }));
@@ -286,10 +359,38 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       case 'preview_campaign':
         return asToolResult(await rest(`/campaigns/${encodeURIComponent(String(a.campaign_id))}/preview`));
       case 'launch_campaign': {
+        // The REST API reads timezone_send + timezone_send_hour; a bare local_hour
+        // is ignored there and the campaign would send immediately.
         const body: Record<string, unknown> = {};
-        if (typeof a.local_hour === 'number') body.local_hour = a.local_hour;
+        if (typeof a.local_hour === 'number') {
+          body.timezone_send = true;
+          body.timezone_send_hour = a.local_hour;
+        }
         return asToolResult(await rest(`/campaigns/${encodeURIComponent(String(a.campaign_id))}/launch`, { method: 'POST', body }));
       }
+      case 'search_messages': {
+        const query: Record<string, string> = { q: String(a.query) };
+        if (typeof a.max === 'number') query.max = String(a.max);
+        if (typeof a.page_token === 'string') query.pageToken = a.page_token;
+        return asToolResult(await rest(`/accounts/${encodeURIComponent(String(a.account_id))}/messages`, { query }));
+      }
+      case 'get_message':
+        return asToolResult(await rest(`/accounts/${encodeURIComponent(String(a.account_id))}/messages/${encodeURIComponent(String(a.message_id))}`));
+      case 'create_draft': {
+        const body: Record<string, unknown> = { subject: a.subject, htmlBody: a.html_body };
+        if (a.to !== undefined)          body.to = a.to;
+        if (a.cc !== undefined)          body.cc = a.cc;
+        if (a.text_body !== undefined)   body.textBody = a.text_body;
+        if (a.from !== undefined)        body.from = a.from;
+        if (a.thread_id !== undefined)   body.threadId = a.thread_id;
+        if (a.in_reply_to !== undefined) body.inReplyTo = a.in_reply_to;
+        if (a.references !== undefined)  body.references = a.references;
+        if (a.reply_all !== undefined)   body.replyAll = a.reply_all;
+        if (a.signature !== undefined)   body.signature = a.signature;
+        return asToolResult(await rest(`/accounts/${encodeURIComponent(String(a.account_id))}/drafts`, { method: 'POST', body }));
+      }
+      case 'delete_draft':
+        return asToolResult(await rest(`/accounts/${encodeURIComponent(String(a.account_id))}/drafts/${encodeURIComponent(String(a.draft_id))}`, { method: 'DELETE' }));
       case 'pause_campaign':
         return asToolResult(await rest(`/campaigns/${encodeURIComponent(String(a.campaign_id))}/pause`, { method: 'POST' }));
       case 'resume_campaign':
